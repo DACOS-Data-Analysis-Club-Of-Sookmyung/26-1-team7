@@ -19,22 +19,3 @@ qdrant_client = QdrantClient(
 )
 
 print(qdrant_client.get_collections())
-
-
-# 법령 & 판례
-qdrant_client.create_collection(
-    collection_name="kor_case_vec",
-    vectors_config=VectorParams(
-        size=1024,          # 임베딩 차원: nlpai-lab/KURE-v1
-        distance=Distance.COSINE, # 코사인 유사도 사용
-    ),
-)
-
-# 가이드라인
-qdrant_client.create_collection(
-    collection_name="kor_guideline_vec",
-    vectors_config=VectorParams(
-        size=1024,          # 임베딩 차원: nlpai-lab/KURE-v1
-        distance=Distance.COSINE, # 코사인 유사도 사용
-    ),
-)
