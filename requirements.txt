@@ -1,24 +1,32 @@
 # =========================
-# LangChain
+# LangChain / LangGraph
 # =========================
-langchain==1.2.18
-langchain-core==1.3.3
-langchain-community==0.4.1
-
-# =========================
-# Qdrant
-# =========================
+langchain-core==1.4.8
+langgraph==1.2.7
+langchain-google-genai==4.2.6
+langgraph-checkpoint-sqlite==3.1.0
 langchain-qdrant==1.1.0
-qdrant-client
 
 # =========================
-# HuggingFace / External Models
+# Gemini / Qdrant
 # =========================
-langchain-huggingface==1.2.0
-transformers
-huggingface-hub
-sentence-transformers
-torch
+google-genai==2.8.0
+google-generativeai==0.8.6
+qdrant-client==1.18.0
+
+# =========================
+# Backend / Frontend
+# =========================
+fastapi==0.138.2
+uvicorn==0.50.0
+streamlit==1.58.0
+requests==2.34.2
+
+# =========================
+# Data
+# =========================
+pandas==3.0.4
+openpyxl==3.1.5
 
 # =========================
 # Utility
