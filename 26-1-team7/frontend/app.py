@@ -1,8 +1,11 @@
+import uuid
+
 import requests
 import streamlit as st
 from datetime import datetime
 
 API_URL = "http://localhost:8000/chat"
+HISTORY_URL = "http://localhost:8000/history"
 
 # 자주 나오는 상황을 빠른 시작 버튼으로 제시
 QUICK_START_OPTIONS = [
@@ -18,16 +21,23 @@ st.set_page_config(
 )
 
 # ── 세션 상태 초기화 ────────────────────────────────────────
+# URL 쿼리 파라미터에 session_id가 없으면 새로 만들어서 URL에 고정한다.
+# 같은 URL(같은 session_id)로 다시 들어오면 새로고침/새 탭이어도 같은 세션으로 인식된다.
+if "session_id" not in st.query_params:
+    st.query_params["session_id"] = f"chat_{uuid.uuid4().hex[:8]}"
+
+url_session_id = st.query_params["session_id"]
+
 if "sessions" not in st.session_state:
     st.session_state.sessions = {
-        "chat_1": {
+        url_session_id: {
             "title": "새로운 대화",
             "messages": [],
         },
     }
 
 if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "chat_1"
+    st.session_state.current_chat = url_session_id
 
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
@@ -35,12 +45,35 @@ if "pending_question" not in st.session_state:
 if "chat_counter" not in st.session_state:
     st.session_state.chat_counter = 1
 
+# ── 현재 대화 히스토리 복원 ──────────────────────────────────
+# 사이드바를 그리기 "전에" 먼저 실행해야, 사이드바에 복원된 제목/내역이 반영된다.
+current_chat_id = st.session_state.current_chat
+current = st.session_state.sessions[current_chat_id]
+
+if not current["messages"] and not current.get("history_loaded"):
+    try:
+        resp = requests.get(f"{HISTORY_URL}/{current_chat_id}", timeout=10)
+        resp.raise_for_status()
+        restored = resp.json().get("messages", [])
+        if restored:
+            current["messages"] = restored
+            if current["title"] == "새로운 대화":
+                first_user_msg = next(
+                    (m["content"] for m in restored if m["role"] == "user"), ""
+                )
+                if first_user_msg:
+                    current["title"] = first_user_msg[:20]
+    except Exception:
+        pass  # 서버 연결 안 되거나 기록 없으면 그냥 빈 대화로 시작
+    finally:
+        current["history_loaded"] = True  # 이 세션에선 다시 시도하지 않도록 플래그
+
 
 # ── API 호출 & 콜백 ────────────────────────────────────────
-def ask_api(question: str, thread_id: str) -> dict:
+def ask_api(question: str, session_id: str) -> dict:
     response = requests.post(
         API_URL,
-        json={"question": question, "thread_id": thread_id},
+        json={"session_id": session_id, "message": question},
         timeout=120,
     )
     response.raise_for_status()
@@ -116,13 +149,14 @@ with st.sidebar:
     st.markdown("### 💬 대화 목록")
 
     if st.button("➕ 새 대화 시작", use_container_width=True):
-        st.session_state.chat_counter += 1
-        new_id = f"chat_{st.session_state.chat_counter}"
+        new_id = f"chat_{uuid.uuid4().hex[:8]}"
         st.session_state.sessions[new_id] = {
             "title": "새로운 대화",
             "messages": [],
         }
         st.session_state.current_chat = new_id
+        st.query_params["session_id"] = new_id  # URL도 새 세션으로 갱신
+        st.rerun()
 
     st.markdown("---")
 
@@ -141,6 +175,8 @@ with st.sidebar:
         else:
             if st.button(chat_data["title"], key=f"select_{chat_id}", use_container_width=True):
                 st.session_state.current_chat = chat_id
+                st.query_params["session_id"] = chat_id
+                st.rerun()
 
     st.markdown("---")
     st.caption("전세사기 피해자 지원 RAG 챗봇")
@@ -158,15 +194,15 @@ with header_right:
 
 st.markdown("---")
 
-current_chat_id = st.session_state.current_chat
-current = st.session_state.sessions[current_chat_id]
-
 # ── 1) 질문 먼저 캡처 (렌더링보다 먼저! chat_input은 매 실행마다 반드시 호출) ──
+# chat_input은 조건문 안에 넣지 말고 항상 먼저 호출!
+typed_question = st.chat_input("전세사기 관련 궁금한 점을 입력해주세요...")
+
 if st.session_state.pending_question:
     question = st.session_state.pending_question
     st.session_state.pending_question = None
 else:
-    question = st.chat_input("전세사기 관련 궁금한 점을 입력해주세요...")
+    question = typed_question
 
 # ── 2) 화면 렌더링: 질문도 없고 메시지도 없을 때만 인삿말 ────────
 if question is None and len(current["messages"]) == 0:
@@ -217,7 +253,11 @@ if question:
     with st.chat_message("assistant"):
         try:
             with st.spinner("관련 문서를 찾고 답변을 생성하는 중입니다..."):
-                result = ask_api(question, current_chat_id)
+                result = ask_api(question, session_id=current_chat_id)
+
+                # 🔧 [디버그] 실제 API 응답 확인용 (필요 없으면 이 블록 지워도 됨)
+                with st.expander("🔧 [디버그] API 원본 응답"):
+                    st.json(result)
 
             answer = result.get("answer", "답변을 가져오지 못했습니다.")
 
