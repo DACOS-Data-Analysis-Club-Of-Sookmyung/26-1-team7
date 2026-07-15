@@ -85,29 +85,43 @@ def set_pending_question(question: str):
 
 
 # ── 렌더링 헬퍼 (참고한 문서 보기 / 이어서 물어볼 수 있어요) ────────────
+SOURCE_TYPE_LABELS = {
+    "guideline": "가이드라인",
+    "case": "판례",
+}
+
+TOOL_NAME_LABELS = {
+    "search_prevention_guides": "예방/대응 가이드 검색",
+    "search_case_precedents": "유사 판례 검색",
+}
+
+
 def render_sources(sources: list[dict]):
     if not sources:
         return
 
-    with st.expander("📚 참고한 문서 보기"):
-        for i, source in enumerate(sources, start=1):
-            title = source.get("title", "제목 없음")
-            knowledge_type = source.get("knowledge_type", "")
-            doc_source = source.get("doc_source", "")
-            category = source.get("category", "")
-            stage = source.get("stage", "")
-            case_id = source.get("case_id", "")
+    found_sources = [
+        s for s in sources
+        if s.get("content") and "찾지 못했습니다" not in s.get("content", "")
+    ]
 
-            st.markdown(f"**{i}. {title}**")
-            st.caption(f"{knowledge_type} · {doc_source}")
+    if not found_sources:
+        return
 
-            if category:
-                st.write(f"- 분류: {category}")
-            if stage:
-                st.write(f"- 단계: {stage}")
-            if case_id:
-                st.write(f"- 사건번호/식별자: {case_id}")
+    with st.expander(f"📚 참고한 문서 보기 ({len(found_sources)}건)"):
+        for i, source in enumerate(found_sources, start=1):
+            content = source.get("content", "")
+            source_type = source.get("source", "")
+            metadata = source.get("metadata", {})
+            tool_name = metadata.get("tool_name", "")
 
+            type_label = SOURCE_TYPE_LABELS.get(source_type, source_type)
+            tool_label = TOOL_NAME_LABELS.get(tool_name, tool_name)
+
+            st.markdown(f"**{i}. {type_label}**")
+            if tool_label:
+                st.caption(f"검색 도구: {tool_label}")
+            st.write(content)
             st.divider()
 
 
