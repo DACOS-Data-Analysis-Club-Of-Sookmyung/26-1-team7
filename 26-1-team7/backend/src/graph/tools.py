@@ -76,16 +76,31 @@ def search(
             query_filter = Filter(must=conditions)
 
     # 유사도 검색 수행
-    results = qdrant_client.query_points(
-        collection_name=collection_name,
-        query=query_vector,
-        limit=limit,
-        score_threshold=score_threshold,
-        query_filter=query_filter,
-    )
+    try:
+        results = qdrant_client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=limit,
+            score_threshold=score_threshold,
+            query_filter=query_filter,
+        )
+    except Exception as e:
+        # 필터에 쓴 필드에 Qdrant 인덱스가 없는 경우 등 필터 자체가 원인인 에러는
+        # 필터 없이 재시도해서 최소한 검색 결과는 나오게 함 (완전히 죽는 것보단 나음)
+        if query_filter is not None:
+            print(f"[검색 경고] 필터 적용 검색 실패({e}), 필터 없이 재시도")
+            results = qdrant_client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                limit=limit,
+                score_threshold=score_threshold,
+                query_filter=None,
+            )
+        else:
+            raise
+
     #  Qdrant의 ScoredPoint 객체 리스트 (각각 id, score, payload 포함)
     return results.points
-
 
 def format_results(points) -> str:
     """검색 결과를 챗봇 컨텍스트로 넣기 좋게 텍스트로 포맷"""
