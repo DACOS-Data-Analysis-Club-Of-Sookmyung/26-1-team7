@@ -57,7 +57,7 @@ from ragas.embeddings import GoogleEmbeddings
 from ragas.metrics.collections import (
     Faithfulness,
     AnswerRelevancy,
-    ContextPrecisionWithoutReference,
+    ContextPrecisionWithReference,
     ContextRecall,
 )
 
@@ -106,6 +106,6 @@ def build_metrics() -> dict:
     return {
         "faithfulness": Faithfulness(llm=llm),
         "response_relevancy": AnswerRelevancy(llm=llm, embeddings=embeddings),
-        "context_precision": ContextPrecisionWithoutReference(llm=llm),
+        "context_precision": ContextPrecisionWithReference(llm=llm),
         "context_recall": ContextRecall(llm=llm),
     }

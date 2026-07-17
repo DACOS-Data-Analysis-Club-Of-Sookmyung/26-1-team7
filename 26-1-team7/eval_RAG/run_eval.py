@@ -58,14 +58,14 @@ async def evaluate_row(row: dict, metrics: dict) -> dict:
         )
         result["response_relevancy"] = relevancy.value
 
-        precision = await metrics["context_precision"].ascore(
-            user_input=row["question"],
-            response=row["answer"],
-            retrieved_contexts=contexts,
-        )
-        result["context_precision"] = precision.value
-
         if row.get("ground_truth") and not pd.isna(row.get("ground_truth")):
+            precision = await metrics["context_precision"].ascore(
+                user_input=row["question"],
+                retrieved_contexts=contexts,
+                reference=str(row["ground_truth"]),
+            )
+            result["context_precision"] = precision.value
+
             recall = await metrics["context_recall"].ascore(
                 user_input=row["question"],
                 retrieved_contexts=contexts,
