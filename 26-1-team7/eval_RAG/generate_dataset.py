@@ -4,8 +4,15 @@
 qa_seed.csv의 질문들을 실제 LangGraph 파이프라인(build_graph_builder)에
 하나씩 태워서, 실제 검색된 contexts와 생성된 answer를 채운다.
 
-입력: eval/data/qa_seed.csv       (question, ground_truth, category, intent, source)
-출력: eval/data/qa_with_results.csv (question, contexts, answer, ground_truth, category, intent, route, followup_questions, error)
+입력: eval_RAG/data/qa_seed.csv
+      (question, ground_truth, category, intent, followup_questions, source, source_id)
+      -- followup_questions/source/source_id는 alias 후보 시절 메타데이터라
+      실행에는 안 쓰이지만, source/source_id는 결과 추적용으로 출력에 그대로 실어간다.
+출력: eval_RAG/data/qa_with_results.csv
+      (question, contexts, answer, ground_truth, category, intent, route,
+       followup_questions, error, source, source_id)
+      -- 여기서 followup_questions는 seed의 것이 아니라 파이프라인 실행 중
+      에이전트가 실제로 생성한 후속 질문임 (덮어써짐).
 
 주의 (JeonseAgentState 기준으로 확인함, app/state.py):
 - State에는 answer 필드가 없다. 최종 답변은 messages(add_messages)의 마지막
@@ -17,6 +24,8 @@ qa_seed.csv의 질문들을 실제 LangGraph 파이프라인(build_graph_builder
   분기하는 로직이 있다면 eval 때도 채워주는 게 안전하다 (thread_id와는 별개).
 - route / followup_questions는 ragas 채점엔 안 쓰이지만, 나중에 "라우팅이
   잘못돼서 점수가 낮은 건지" 디버깅할 때 필요해서 같이 저장해둔다.
+- seed의 source / source_id는 "이 질문이 guide/contract_clause/quick_start_manual
+  중 어디서 왔는지" 추적하려고 결과에도 그대로 실어둔다 (에러/폴백 분석할 때 유용).
 
 content 파싱 관련:
 - 최신 Gemini 통합은 message.content가 순수 문자열이 아니라
@@ -114,6 +123,10 @@ async def run_one(graph, i: int, row: dict, semaphore: asyncio.Semaphore, total:
             "session_id": thread_id,  # State 입력 필드; 백엔드 분기 로직 대비해서 채워줌
         }
 
+        # seed 단계 메타데이터 (source/source_id) -- 실행 성공/실패와 무관하게 그대로 실어감
+        source = row.get("source", "")
+        source_id = row.get("source_id", "")
+
         try:
             result = await graph.ainvoke(inputs, config=config)
         except Exception as e:
@@ -128,6 +141,8 @@ async def run_one(graph, i: int, row: dict, semaphore: asyncio.Semaphore, total:
                 "route": "",
                 "followup_questions": "",
                 "error": str(e),
+                "source": source,
+                "source_id": source_id,
             }
 
         contexts = extract_contexts(result)
@@ -144,6 +159,8 @@ async def run_one(graph, i: int, row: dict, semaphore: asyncio.Semaphore, total:
             "route": result.get("route", ""),
             "followup_questions": " | ".join(followups) if followups else "",
             "error": "",
+            "source": source,
+            "source_id": source_id,
         }
 
         print(f"진행: {i + 1}/{total} 완료")
