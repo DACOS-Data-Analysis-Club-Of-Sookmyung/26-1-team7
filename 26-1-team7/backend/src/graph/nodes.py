@@ -149,18 +149,31 @@ def _inject_knowledge_type_filter(tool_call_args: dict, knowledge_types: list[st
     return new_args
 
 
+# 실험 플래그: 문서 수가 적은 현재 단계에서는 knowledge_type 필터가
+# 정답 문서까지 걸러버리는 경우가 많아 일단 꺼둔다.
+# (예: "처벌받으면 보증금 자동으로 받나요" -> case_law로 라우팅돼
+#  prevention/support 쪽 정답 문서가 후보군에서 아예 제외되는 문제)
+# route/knowledge_types는 계속 계산해서 로깅·후속질문 생성 등에는 활용한다.
+ENABLE_KNOWLEDGE_TYPE_FILTER = False
+
+
 def tools_node_wrapper(state: JeonseAgentState) -> dict:
-    """agent가 요청한 tool_calls를 실행하되, 실행 직전 knowledge_types 필터를
-    강제로 주입해서 route 분류 결과 밖의 문서가 섞이지 않게 한다.
+    """agent가 요청한 tool_calls를 실행한다.
+    ENABLE_KNOWLEDGE_TYPE_FILTER=True일 때만 route 분류 결과로 만든
+    knowledge_types 필터를 강제 주입하고, False면 필터 없이 임베딩
+    유사도만으로 넓게 검색한다.
     """
     ai_message = state["messages"][-1]
     knowledge_types = state.get("knowledge_types", [])
 
-    patched_tool_calls = [
-        {**tc, "args": _inject_knowledge_type_filter(tc["args"], knowledge_types)}
-        for tc in (ai_message.tool_calls or [])
-    ]
-    patched_ai_message = ai_message.model_copy(update={"tool_calls": patched_tool_calls})
+    if ENABLE_KNOWLEDGE_TYPE_FILTER:
+        patched_tool_calls = [
+            {**tc, "args": _inject_knowledge_type_filter(tc["args"], knowledge_types)}
+            for tc in (ai_message.tool_calls or [])
+        ]
+        patched_ai_message = ai_message.model_copy(update={"tool_calls": patched_tool_calls})
+    else:
+        patched_ai_message = ai_message
 
     tool_node = ToolNode(tools)
     result = tool_node.invoke({**state, "messages": [patched_ai_message]})
